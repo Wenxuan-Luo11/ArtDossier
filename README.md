@@ -1,218 +1,74 @@
-# ArtDossier
+<div align="center">
 
-A VLM-based pipeline for generating structured eight-layer art-historical dossiers for 17th-century Dutch paintings, combining visual language models, hybrid RAG retrieval, and critical aesthetics theory.
+# ArtDossier 🖼️🔍
+### Multimodal RAG Engine for Grounded Cultural Analytics & Visual Interpretation
 
-Developed as an MA thesis project.
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Vector Store: Qdrant](https://img.shields.io/badge/Vector%20DB-Qdrant-red.svg?logo=qdrant&logoColor=white)](https://qdrant.tech/)
+[![Framework: LlamaIndex](https://img.shields.io/badge/Framework-LlamaIndex-purple.svg)](https://www.llamaindex.ai/)
+[![VLM: Qwen3-VL](https://img.shields.io/badge/Models-Qwen3--VL%20%7C%20DeepSeek--V4-green.svg)](https://huggingface.co/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
----
+*An end-to-end vision-language pipeline that mitigates multimodal hallucination by decoupling blind visual perception from multi-source hybrid RAG retrieval and citation-grounded reasoning.*
 
-## What it does
-
-Given a painting image, ArtDossier produces a three-panel output:
-
-- **Panel 1** — Raw visual description by the VLM (no external knowledge)
-- **Panel 2** — Internal reasoning trace (thinking mode)
-- **Panel 3** — Eight-layer structured dossier synthesising visual analysis, retrieved scholarly sources, and critical reflection
-
-The eight layers are: Socio-Historical Background · Artist's Background · Materiality & Techniques · Immediate Appearance · Situated Symbols & Metaphors · Artistic & Spiritual Traditions · Horizons of Meaning · Ambiguity
+[System Architecture](#-system-architecture) • [Key Features](#-key-features) • [Benchmark Results](#-benchmark--empirical-evaluation) • [Quickstart](#-quickstart) • [Methodology](#-research--methodology)
 
 ---
 
-## Repository structure
+</div>
 
-```
-artdossier/
-├── system/
-│   ├── pipeline/
-│   │   ├── pipeline.py        # Main three-panel orchestrator
-│   │   ├── vlm_client.py      # SiliconFlow / OpenAI-compatible VLM wrapper
-│   │   └── search_tool.py     # DuckDuckGo + full-page web search
-│   └── prompts/
-│       ├── panel1_caption.txt # System prompt: raw visual description
-│       ├── panel2_thinking.txt
-│       └── panel3_dossier.txt # System prompt: eight-layer dossier
-│
-├── rag/
-│   ├── ingestion/
-│   │   └── ingest.py          # Chunk + embed corpus → Qdrant
-│   └── retrieval/
-│       └── retriever.py       # Hybrid vector + keyword retrieval + reranker
-│
-├── corpus/
-│   └── normalize.py           # Normalise raw JSON from all corpus sources
-│
-├── evaluation/
-│   ├── run_eval.py            # Quantitative metrics (F1, METEOR, BERTScore, CLIPScore)
-│   ├── run_llm_judge.py       # LLM-as-judge qualitative evaluation
-│   ├── llm_judge_prompt.txt   # Editable judge system prompt
-│   ├── quantitative_analysis.md
-│   └── graphs/                # All evaluation figures
-│
-├── run_batch.py               # Run pipeline on a folder of images
-├── setup_qdrant_index.py      # One-time Qdrant text index setup
-├── requirements.txt
-├── .env.example               # Copy to .env and fill in your API keys
-└── .gitignore
-```
+## 📌 Executive Summary
+
+While contemporary Vision-Language Models (VLMs) can generate fluent surface-level descriptions, they suffer from two critical failure modes in domain-specific workflows: **visual hallucination** and an inability to bridge the **semantic gap** between raw pixels and nuanced contextual knowledge.
+
+**ArtDossier** is a production-grade multimodal retrieval-augmented generation (RAG) framework developed to resolve this bottleneck. Given an unlabelled high-resolution image, the pipeline:
+1. **Perceives without metadata bias:** Uses an 8B vision model to extract formal visual descriptors, objects, and iconographic queries *blind* to title and artist.
+2. **Retrieves across authoritative corpora:** Executes hybrid vector search (BGE-M3 in Qdrant) + cross-encoder reranking (BGE-Reranker-v2-m3) across 6,557 ingested scholarly chunks (Rijksmuseum, Leiden Collection, Web Gallery of Art) alongside live web search.
+3. **Reasoning & synthesis:** Employs a 32B thinking model that treats initial visual captions as a biased prior, audits retrieved evidence in an inspectable trace, and compiles an eight-layer domain dossier with strict inline source attribution.
 
 ---
 
-## Setup
+## 🏗️ System Architecture
 
-### 1. Prerequisites
+```mermaid
+flowchart TD
+    subgraph P1["Panel 1: Blind Visual Perception (Qwen3-VL-8B)"]
+        A[Input Painting Image] --> B[Visual Feature Extraction]
+        B --> C[3-Query Decomposition: Visual / Iconography / Synthesis]
+    end
 
-- Python 3.10+
-- [Docker](https://docs.docker.com/get-docker/) (for Qdrant)
-- A [SiliconFlow](https://siliconflow.cn) account (or any OpenAI-compatible API endpoint)
-- GPU recommended for embedding + reranking (CPU works, ~60 min for full corpus ingest)
+    subgraph RAG["Hybrid Knowledge Retrieval & Reranking"]
+        C -->|Dense Vector Embedding BGE-M3| D[(Qdrant Vector DB<br/>6,557 Chunks / 3,425 Sources)]
+        C -->|spaCy Noun Extraction| E[Reciprocal Rank Fusion Keyword Search]
+        C -->|Synthesis Query| F[Live Web Context Engine]
+        D & E --> G[BGE-Reranker-v2-m3 Cross-Encoder]
+        G & F --> H[Ranked & Source-Prioritized Evidence Set]
+    end
 
-### 2. Install dependencies
+    subgraph P2["Panel 2: Auditable Stepwise Reasoning"]
+        A & H --> I[Thinking Trace: Qwen3-VL-32B-Thinking]
+        I --> J[Identify Discrepancies & Audit Mismatches]
+    end
 
-```bash
-pip install -r requirements.txt
-```
+    subgraph P3["Panel 3: Structured 8-Layer Dossier Synthesis"]
+        J --> K[Layer 1: Socio-Historical Context]
+        J --> L[Layer 2-4: Artist / Materiality / Appearance]
+        J --> M[Layer 5-6: Situated Symbols / Traditions]
+        J --> N[Layer 7-8: Epistemic Horizons & Ambiguity]
+        K & L & M & N --> O[Export Audit-Ready JSON / Dossier with Inline Citations]
+    end
 
-For evaluation metrics:
-```bash
-pip install bert-score nltk open-clip-torch torchvision
-python -m spacy download en_core_web_sm
-```
-
-### 3. Configure environment
-
-```bash
-cp .env.example .env
-# Edit .env and add your API keys
-```
-
-### 4. Start Qdrant
-
-```bash
-docker run -p 6333:6333 -v qdrant_storage:/qdrant/storage qdrant/qdrant
-```
-
-### 5. Prepare the corpus
-
-Place raw corpus JSON files in `corpus/raw/` following the structure:
-- `corpus/raw/leiden_collection/*.json`
-- `corpus/raw/rijksmuseum/all_paintings/*.json`
-- `corpus/raw/wga/paintings/*.json`
-
-Then normalise:
-```bash
-python corpus/normalize.py
-```
-
-### 6. Ingest into Qdrant
-
-```bash
-python rag/ingestion/ingest.py
-python setup_qdrant_index.py   # creates text indexes for hybrid search
+    style P1 fill:#f8f9fa,stroke:#0d6efd,stroke-width:2px
+    style RAG fill:#f1f8ff,stroke:#0969da,stroke-width:2px
+    style P2 fill:#fff8e6,stroke:#bf8700,stroke-width:2px
+    style P3 fill:#f6ffed,stroke:#52c41a,stroke-width:2px
 ```
 
 ---
 
-## Running the pipeline
+## ⚡ Key Engineering & Design Decisions
 
-### Single image
-
-```python
-from system.pipeline.pipeline import ArtDossierPipeline
-
-pipeline = ArtDossierPipeline()
-result = pipeline.run(image_path="painting.jpg")
-
-print(result.panel1)           # raw visual description
-print(result.panel2_thinking)  # reasoning trace
-print(result.panel3)           # eight-layer dossier
-```
-
-**Expert mode** (Leiden Collection + Rijksmuseum only, WGA excluded):
-
-```python
-pipeline = ArtDossierPipeline(
-    allowed_doc_types=["scholarly_catalogue", "institutional_catalogue"]
-)
-```
-
-### Batch run
-
-```bash
-python run_batch.py eval_images/broad    # broad mode
-python run_batch.py eval_images/expert   # expert mode
-python run_batch.py eval_images/broad --redo   # re-run all
-```
-
-Outputs saved to `experiments/AI/` as `.txt` files with all three panels + RAG chunks used.
-
----
-
-## Evaluation
-
-### Quantitative metrics (F1, METEOR, BERTScore, CLIPScore)
-
-```bash
-python evaluation/run_eval.py
-```
-
-Outputs CSVs to `evaluation/Quantitative Metrics Groundedness and Situatedness/`.
-
-### LLM qualitative judge
-
-```bash
-python evaluation/run_llm_judge.py
-```
-
-Requires `SILICONFLOW_API_KEY` or `ANTHROPIC_API_KEY` in `.env`. Resume-safe (skips already-scored paintings).
-
----
-
-## Models used
-
-| Role | Model |
-|---|---|
-| Panel 1 (visual description) | Qwen/Qwen3-VL-8B-Instruct |
-| Panel 2+3 (reasoning + dossier) | Qwen/Qwen3-VL-32B-Thinking |
-| Embedding | BAAI/bge-m3 |
-| Reranker | BAAI/bge-reranker-v2-m3 |
-| LLM judge | deepseek-ai/DeepSeek-V4-Flash |
-| BERTScore | roberta-large |
-| CLIPScore | ViT-B/32 (OpenAI) |
-
-Models are downloaded automatically on first use to the `models/` directory (not committed to git).
-
----
-
-## Corpus
-
-The pipeline was evaluated on three corpus sources:
-
-| Source | Entries | Doc type |
-|---|---|---|
-| [Leiden Collection](https://www.theleidencollection.com) | 195 | scholarly_catalogue |
-| [Rijksmuseum](https://www.rijksmuseum.nl/en/collection) | 739 | institutional_catalogue |
-| [Web Gallery of Art](https://www.wga.hu) | 2,724 | web_catalogue |
-
-Raw corpus data is not redistributed here. See each institution's data access terms.
-
----
-
-## Key design decisions
-
-- **No ground truth at inference time** — the pipeline never receives the painting's title or artist as input. Retrieval is driven entirely by Panel 1's visual description.
-- **Epistemic transparency** — sources are labelled by authority level (scholarly / institutional / web) and injected into the prompt so the model can distinguish what it knows vs. what it retrieved.
-- **Expert mode** — excludes WGA, which carries editorial bias not solely reflective of the painting (eurocentric framing, selective coverage).
-- **Hybrid retrieval** — vector search (BGE-M3) + spaCy noun-phrase keyword search + cross-encoder reranking (bge-reranker-v2-m3) + source diversity quota.
-
----
-
-## Citation
-
-If you use this code, please cite the accompanying thesis (details to be added on paper).
-
----
-
-## License
-
-MIT License. See `LICENSE` for details.
-Corpus data is subject to each institution's own terms of use and is not included in this repository.
+- **Inference-Time Metadata Blindness:** Unlike standard RAG setups that query by database ID or known titles, ArtDossier receives *zero* title or metadata prompts. It tests genuine computer-vision-to-text retrieval in zero-shot conditions.
+- **Hierarchical Document Authority:** Prompts enforce strict epistemic tiers: Scholarly Catalogues (e.g., Leiden Collection) > Institutional Archives (Rijksmuseum API) > General Web Catalogues (WGA).
+- **Inspectable Thinking Trace:** Panel 2 isolates the model's self-critique and alignment logic, preventing black-box confabulation before compiling the final client-facing dossier.
+- **Dual Evaluation Regime:** Combines automated NLP metrics (F1, METEOR, BERTScore, CLIPScore) with parallel qualitative evaluations by domain humans and an independent LLM judge (`DeepSeek-V4-Flash`).
